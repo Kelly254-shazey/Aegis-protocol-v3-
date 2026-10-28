@@ -1,9 +1,9 @@
-go 1.23.0
+go 1.26.0
 
 use (
+	./control
 	./core
 	./relay
-	./control
 	./tools/desktop_client
 	./tools/e2e_benchmark
 )

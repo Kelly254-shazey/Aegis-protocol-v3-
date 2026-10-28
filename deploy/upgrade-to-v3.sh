@@ -14,8 +14,10 @@ echo "=================================================================="
 echo "[1/6] Stopping old Version 2 services and releasing ports..."
 systemctl stop aegis aegis-relay aegis-control 2>/dev/null || true
 systemctl disable aegis 2>/dev/null || true
-docker stop $(docker ps -aq) 2>/dev/null || true
-docker rm $(docker ps -aq) 2>/dev/null || true
+if command -v docker &> /dev/null; then
+    docker stop $(docker ps -aq) 2>/dev/null || true
+    docker rm $(docker ps -aq) 2>/dev/null || true
+fi
 pkill -9 -f aegis-relay 2>/dev/null || true
 pkill -9 -f aegis 2>/dev/null || true
 fuser -k -9 443/udp 2>/dev/null || true
@@ -40,22 +42,21 @@ apt-get update -y
 apt-get install -y git curl iptables iptables-persistent ca-certificates
 
 # Install Go if not present
-if ! command -v go &> /dev/null; then
+if ! command -v /usr/local/go/bin/go &> /dev/null && ! command -v go &> /dev/null; then
     echo "[*] Installing Go compiler..."
     curl -fsSL https://go.dev/dl/go1.23.2.linux-amd64.tar.gz -o /tmp/go.tar.gz
     rm -rf /usr/local/go
     tar -C /usr/local -xzf /tmp/go.tar.gz
     rm -f /tmp/go.tar.gz
-    export PATH=$PATH:/usr/local/go/bin
-    echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
-else
-    export PATH=$PATH:/usr/local/go/bin:$(dirname $(which go))
 fi
+export PATH=/usr/local/go/bin:$PATH
 
 # 3. Clone and Compile Aegis Protocol v3
 echo "[3/6] Fetching latest Aegis Protocol v3 source and compiling..."
 rm -rf /tmp/aegis-v3-build
 git clone https://github.com/Kelly254-shazey/Aegis-protocol-v3-.git /tmp/aegis-v3-build
+cd /tmp/aegis-v3-build
+go work sync 2>/dev/null || true
 cd /tmp/aegis-v3-build/relay
 go build -ldflags="-w -s" -o /opt/aegis/aegis-relay main.go nat.go
 chmod +x /opt/aegis/aegis-relay
