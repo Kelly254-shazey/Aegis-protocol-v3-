@@ -21,7 +21,7 @@ extern const char *_GoStringPtr(_GoString_ s);
 /* Start of preamble from import "C" comments.  */
 
 
-#line 3 "jni.go"
+#line 5 "jni.go"
 
 #include <jni.h>
 #include <stdlib.h>
@@ -96,7 +96,7 @@ typedef struct { void *data; GoInt len; GoInt cap; } GoSlice;
 extern "C" {
 #endif
 
-extern jint Java_com_aegis_v3_AegisCore_startEngineNative(JNIEnv* env, jclass clazz, jstring jEndpoint, jstring jServerName, jint tunFd);
+extern jint Java_com_aegis_v3_AegisCore_startEngineNative(JNIEnv* env, jclass clazz, jstring jEndpoint, jstring jServerName, jint tunFd, jint socketFd);
 extern void Java_com_aegis_v3_AegisCore_updateTelemetryNative(JNIEnv* env, jclass clazz, jint rsrp, jint rsrq, jint rssnr, jdouble loss);
 extern void Java_com_aegis_v3_AegisCore_stopEngineNative(JNIEnv* env, jclass clazz);
 

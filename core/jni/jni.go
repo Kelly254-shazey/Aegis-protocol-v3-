@@ -17,6 +17,8 @@ static void jni_release_string(JNIEnv* env, jstring str, const char* chars) {
 import "C"
 import (
 	"context"
+	"log"
+	"net"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -30,24 +32,19 @@ import (
 var (
 	engineMu     sync.Mutex
 	activeEngine *ProductionEngine
-	bufferPool   = sync.Pool{
-		New: func() any {
-			b := make([]byte, 1500)
-			return &b
-		},
-	}
 )
 
 type ProductionEngine struct {
-	client    *transport.Client
-	fecEnc    *fec.Encoder
-	fecDec    *fec.Decoder
-	adaptive  *fec.AdaptiveController
-	telemetry *telemetry.Manager
-	tunFile   *os.File
-	ctx       context.Context
-	cancel    context.CancelFunc
-	running   atomic.Bool
+	client     *transport.Client
+	fecEnc     *fec.Encoder
+	fecDec     *fec.Decoder
+	adaptive   *fec.AdaptiveController
+	telemetry  *telemetry.Manager
+	tunFile    *os.File
+	packetConn net.PacketConn
+	ctx        context.Context
+	cancel     context.CancelFunc
+	running    atomic.Bool
 }
 
 //export Java_com_aegis_v3_AegisCore_startEngineNative
@@ -57,6 +54,7 @@ func Java_com_aegis_v3_AegisCore_startEngineNative(
 	jEndpoint C.jstring,
 	jServerName C.jstring,
 	tunFd C.jint,
+	socketFd C.jint,
 ) C.jint {
 	engineMu.Lock()
 	defer engineMu.Unlock()
@@ -74,20 +72,59 @@ func Java_com_aegis_v3_AegisCore_startEngineNative(
 
 	enc, err := fec.NewEncoder(10, 1)
 	if err != nil {
+		log.Printf("[Aegis-JNI] Failed to init FEC encoder: %v", err)
 		return -1
+	}
+
+	// 1. Wrap protected UDP socket from Android VpnService
+	var packetConn net.PacketConn
+	if socketFd > 0 {
+		file := os.NewFile(uintptr(socketFd), "udp-protect")
+		var err error
+		packetConn, err = net.FilePacketConn(file)
+		if err != nil {
+			log.Printf("[Aegis-JNI] net.FilePacketConn failed: %v", err)
+			packetConn = nil
+		}
+	}
+	if packetConn == nil {
+		var err error
+		packetConn, err = net.ListenUDP("udp", &net.UDPAddr{Port: 0})
+		if err != nil {
+			log.Printf("[Aegis-JNI] net.ListenUDP fallback failed: %v", err)
+			return -2
+		}
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	engine := &ProductionEngine{
-		client:    transport.NewClient(endpoint, serverName),
-		fecEnc:    enc,
-		adaptive:  fec.NewAdaptiveController(enc),
-		telemetry: telemetry.NewManager(),
-		tunFile:   os.NewFile(uintptr(tunFd), "tun0"),
-		ctx:       ctx,
-		cancel:    cancel,
+		client:     transport.NewClient(endpoint, serverName),
+		fecEnc:     enc,
+		adaptive:   fec.NewAdaptiveController(enc),
+		telemetry:  telemetry.NewManager(),
+		tunFile:    os.NewFile(uintptr(tunFd), "tun0"),
+		packetConn: packetConn,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 
+	// In dev/self-signed mode, allow peer verification bypass
+	engine.client.SetInsecureSkipVerify(true)
+
+	// 2. Connect QUIC transport over protected UDP socket
+	dialCtx, dialCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer dialCancel()
+
+	if err := engine.client.Connect(dialCtx, packetConn); err != nil {
+		log.Printf("[Aegis-JNI] Transport Connect to %s failed: %v", endpoint, err)
+		cancel()
+		_ = packetConn.Close()
+		return -3
+	}
+
+	log.Printf("[Aegis-JNI] Connected successfully to Cloud Edge Relay %s", endpoint)
+
+	// 3. Initialize Inbound FEC Decoder
 	engine.fecDec = fec.NewDecoder(3*time.Second, func(blockID uint32, packets [][]byte) {
 		for _, pkt := range packets {
 			if len(pkt) > 0 && engine.tunFile != nil {
@@ -99,34 +136,84 @@ func Java_com_aegis_v3_AegisCore_startEngineNative(
 	engine.running.Store(true)
 	activeEngine = engine
 
+	// 4. Inbound Datagram Loop (QUIC -> FEC Decoder -> tun0)
 	go func() {
-		batch := make([][]byte, 0, 10)
+		datagrams := engine.client.Datagrams()
 		for engine.running.Load() {
-			bufPtr := bufferPool.Get().(*[]byte)
-			buf := *bufPtr
-
-			n, err := engine.tunFile.Read(buf)
-			if err != nil {
-				bufferPool.Put(bufPtr)
+			select {
+			case <-engine.ctx.Done():
 				return
-			}
-			if n > 0 {
-				packet := make([]byte, n)
-				copy(packet, buf[:n])
-				batch = append(batch, packet)
-
-				strategy := engine.adaptive.Current()
-				if len(batch) >= strategy.DataShards {
-					shards, err := engine.fecEnc.EncodeBlock(batch)
-					if err == nil {
-						for _, s := range shards {
-							_ = engine.client.SendDatagram(s.Encode())
-						}
-					}
-					batch = batch[:0]
+			case data, ok := <-datagrams:
+				if !ok {
+					return
+				}
+				shard, err := fec.DecodeShard(data)
+				if err == nil {
+					_ = engine.fecDec.Ingest(shard)
 				}
 			}
-			bufferPool.Put(bufPtr)
+		}
+	}()
+
+	// 5. Outbound Loop (tun0 -> FEC Encoder -> QUIC Datagrams)
+	go func() {
+		readChan := make(chan []byte, 64)
+
+		go func() {
+			buf := make([]byte, 1500)
+			for engine.running.Load() {
+				n, err := engine.tunFile.Read(buf)
+				if err != nil {
+					close(readChan)
+					return
+				}
+				if n > 0 {
+					pkt := make([]byte, n)
+					copy(pkt, buf[:n])
+					select {
+					case readChan <- pkt:
+					case <-engine.ctx.Done():
+						return
+					}
+				}
+			}
+		}()
+
+		batch := make([][]byte, 0, 10)
+		ticker := time.NewTicker(5 * time.Millisecond)
+		defer ticker.Stop()
+
+		flushBatch := func() {
+			if len(batch) == 0 {
+				return
+			}
+			shards, err := engine.fecEnc.EncodeBlock(batch)
+			if err == nil {
+				for _, s := range shards {
+					_ = engine.client.SendDatagram(s.Encode())
+				}
+			}
+			batch = batch[:0]
+		}
+
+		for engine.running.Load() {
+			select {
+			case <-engine.ctx.Done():
+				return
+			case pkt, ok := <-readChan:
+				if !ok {
+					return
+				}
+				batch = append(batch, pkt)
+				strategy := engine.adaptive.Current()
+				if len(batch) >= strategy.DataShards {
+					flushBatch()
+				}
+			case <-ticker.C:
+				if len(batch) > 0 {
+					flushBatch()
+				}
+			}
 		}
 	}()
 
@@ -160,6 +247,9 @@ func Java_com_aegis_v3_AegisCore_stopEngineNative(env *C.JNIEnv, clazz C.jclass)
 		activeEngine.cancel()
 		if activeEngine.client != nil {
 			_ = activeEngine.client.Close()
+		}
+		if activeEngine.packetConn != nil {
+			_ = activeEngine.packetConn.Close()
 		}
 		if activeEngine.tunFile != nil {
 			_ = activeEngine.tunFile.Close()

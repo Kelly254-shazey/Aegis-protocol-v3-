@@ -16,7 +16,6 @@ import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -29,12 +28,13 @@ public class MainActivity extends Activity {
     private static final String PREFS_NAME = "aegis_v3_prefs";
     private static final String KEY_ENDPOINT = "relay_endpoint";
     private static final String KEY_ACCESS_KEY = "access_pass_key";
+    private static final String DEFAULT_ENDPOINT = "192.168.1.119:4433";
+    private static final String DEFAULT_KEY = "AEGIS-V3.STARLINK-PREMIUM-PASS";
 
     private boolean mIsConnected = false;
     private TextView mStatusDot;
     private TextView mStatusText;
     private Button mHeroBtn;
-    private EditText mEndpointInput;
     private EditText mKeyInput;
     private SharedPreferences mPrefs;
     private GradientDrawable mHeroBg;
@@ -55,7 +55,7 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setLayoutParams(new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        root.setPadding(dpToPx(24), dpToPx(36), dpToPx(24), dpToPx(48));
+        root.setPadding(dpToPx(24), dpToPx(48), dpToPx(24), dpToPx(48));
 
         // 1. Apple Header: Top Pill Badge
         TextView starlinkBadge = new TextView(this);
@@ -75,8 +75,17 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         badgeParams.gravity = Gravity.CENTER_HORIZONTAL;
-        badgeParams.setMargins(0, 0, 0, dpToPx(16));
+        badgeParams.setMargins(0, 0, 0, dpToPx(20));
         starlinkBadge.setLayoutParams(badgeParams);
+
+        // Long-click badge to configure relay endpoint if ever needed
+        starlinkBadge.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                showGatewayConfigDialog();
+                return true;
+            }
+        });
         root.addView(starlinkBadge);
 
         // App Title
@@ -93,14 +102,14 @@ public class MainActivity extends Activity {
         subtitle.setTextColor(Color.parseColor("#8E8E93"));
         subtitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         subtitle.setGravity(Gravity.CENTER);
-        subtitle.setPadding(0, dpToPx(4), 0, dpToPx(32));
+        subtitle.setPadding(0, dpToPx(6), 0, dpToPx(44));
         root.addView(subtitle);
 
         // 2. Apple Hero Switch Section
         LinearLayout heroContainer = new LinearLayout(this);
         heroContainer.setOrientation(LinearLayout.VERTICAL);
         heroContainer.setGravity(Gravity.CENTER);
-        heroContainer.setPadding(0, 0, 0, dpToPx(32));
+        heroContainer.setPadding(0, 0, 0, dpToPx(44));
 
         mHeroBtn = new Button(this);
         mHeroBg = new GradientDrawable();
@@ -114,17 +123,18 @@ public class MainActivity extends Activity {
         mHeroBtn.setTypeface(null, Typeface.BOLD);
 
         LinearLayout.LayoutParams heroParams = new LinearLayout.LayoutParams(
-                dpToPx(220), dpToPx(72));
+                dpToPx(240), dpToPx(76));
         heroParams.gravity = Gravity.CENTER_HORIZONTAL;
         mHeroBtn.setLayoutParams(heroParams);
 
+        // One-tap connect: No redundant prompt dialogs
         mHeroBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 if (mIsConnected) {
                     disconnectShield();
                 } else {
-                    showAppleConnectDialog();
+                    prepareAndConnect();
                 }
             }
         });
@@ -134,7 +144,7 @@ public class MainActivity extends Activity {
         LinearLayout statusRow = new LinearLayout(this);
         statusRow.setOrientation(LinearLayout.HORIZONTAL);
         statusRow.setGravity(Gravity.CENTER);
-        statusRow.setPadding(0, dpToPx(12), 0, 0);
+        statusRow.setPadding(0, dpToPx(14), 0, 0);
 
         mStatusDot = new TextView(this);
         mStatusDot.setText("● ");
@@ -152,22 +162,7 @@ public class MainActivity extends Activity {
         heroContainer.addView(statusRow);
         root.addView(heroContainer);
 
-        // 3. Apple Grouped Card: Network Intelligence
-        LinearLayout netCard = new LinearLayout(this);
-        netCard.setOrientation(LinearLayout.VERTICAL);
-        netCard.addView(createSectionHeader("NETWORK INTELLIGENCE"));
-        netCard.addView(createTableRow("Internet Breakout", "Starlink Direct LEO (12ms)", true));
-        netCard.addView(createDivider());
-        netCard.addView(createTableRow("Transport Engine", "RFC 9221 QUIC Datagrams", false));
-        netCard.addView(createDivider());
-        netCard.addView(createTableRow("Loss Reconstruction", "Reed-Solomon GF(2^8) (0% Loss)", true));
-        netCard.addView(createDivider());
-        netCard.addView(createTableRow("Congestion Fast-Path", "Google BBRv3", false));
-        netCard.addView(createDivider());
-        netCard.addView(createTableRow("Hotspot Bridge", "Active (0.0.0.0:8080 WPAD)", true));
-        root.addView(createAppleCard(netCard));
-
-        // 4. Apple Grouped Card: Access Pass Key
+        // 3. Apple Minimalist Grouped Card: Access Pass Key
         LinearLayout keyCard = new LinearLayout(this);
         keyCard.setOrientation(LinearLayout.VERTICAL);
         keyCard.addView(createSectionHeader("AEGIS ACCESS PASS"));
@@ -177,7 +172,7 @@ public class MainActivity extends Activity {
         keyRow.setGravity(Gravity.CENTER_VERTICAL);
 
         mKeyInput = new EditText(this);
-        mKeyInput.setText(mPrefs.getString(KEY_ACCESS_KEY, "AEGIS-V3.STARLINK-PREMIUM-PASS"));
+        mKeyInput.setText(mPrefs.getString(KEY_ACCESS_KEY, DEFAULT_KEY));
         mKeyInput.setTextColor(Color.WHITE);
         mKeyInput.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
         mKeyInput.setBackground(null);
@@ -207,7 +202,7 @@ public class MainActivity extends Activity {
                     if (text != null && text.length() > 0) {
                         mKeyInput.setText(text.toString().trim());
                         mPrefs.edit().putString(KEY_ACCESS_KEY, text.toString().trim()).apply();
-                        Toast.makeText(MainActivity.this, "Access Key Pasted", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "Access Key Updated", Toast.LENGTH_SHORT).show();
                     }
                 }
             }
@@ -216,33 +211,25 @@ public class MainActivity extends Activity {
         keyCard.addView(keyRow);
         root.addView(createAppleCard(keyCard));
 
-        // 5. Apple Grouped Card: Gateway Edge Relay
-        LinearLayout relayCard = new LinearLayout(this);
-        relayCard.setOrientation(LinearLayout.VERTICAL);
-        relayCard.addView(createSectionHeader("GATEWAY EDGE RELAY"));
-
-        mEndpointInput = new EditText(this);
-        mEndpointInput.setText(mPrefs.getString(KEY_ENDPOINT, "192.168.1.119:4433"));
-        mEndpointInput.setTextColor(Color.WHITE);
-        mEndpointInput.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        mEndpointInput.setBackground(null);
-        mEndpointInput.setPadding(0, dpToPx(8), 0, dpToPx(8));
-        mEndpointInput.setSingleLine(true);
-        relayCard.addView(mEndpointInput);
-        root.addView(createAppleCard(relayCard));
-
         scrollView.addView(root);
         setContentView(scrollView);
     }
 
-    private void showAppleConnectDialog() {
+    private void showGatewayConfigDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert);
-        builder.setTitle("Connect to Aegis Network");
-        builder.setMessage("Accelerate and shield all traffic via Starlink Direct LEO transport with zero packet loss?");
-        builder.setPositiveButton("Connect", new DialogInterface.OnClickListener() {
+        builder.setTitle("Gateway Configuration");
+        final EditText input = new EditText(this);
+        input.setText(mPrefs.getString(KEY_ENDPOINT, DEFAULT_ENDPOINT));
+        input.setTextColor(Color.WHITE);
+        builder.setView(input);
+        builder.setPositiveButton("Save", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                prepareAndConnect();
+                String ep = input.getText().toString().trim();
+                if (!ep.isEmpty()) {
+                    mPrefs.edit().putString(KEY_ENDPOINT, ep).apply();
+                    Toast.makeText(MainActivity.this, "Gateway: " + ep, Toast.LENGTH_SHORT).show();
+                }
             }
         });
         builder.setNegativeButton("Cancel", null);
@@ -250,11 +237,8 @@ public class MainActivity extends Activity {
     }
 
     private void prepareAndConnect() {
-        String endpoint = mEndpointInput.getText().toString().trim();
         String accessKey = mKeyInput.getText().toString().trim();
-        mPrefs.edit().putString(KEY_ENDPOINT, endpoint)
-                    .putString(KEY_ACCESS_KEY, accessKey)
-                    .apply();
+        mPrefs.edit().putString(KEY_ACCESS_KEY, accessKey).apply();
 
         Intent intent = VpnService.prepare(this);
         if (intent != null) {
@@ -277,9 +261,10 @@ public class MainActivity extends Activity {
     }
 
     private void startShieldService() {
+        String endpoint = mPrefs.getString(KEY_ENDPOINT, DEFAULT_ENDPOINT);
         Intent intent = new Intent(this, AegisVpnService.class);
         intent.setAction(AegisVpnService.ACTION_CONNECT);
-        intent.putExtra(AegisVpnService.EXTRA_ENDPOINT, mEndpointInput.getText().toString().trim());
+        intent.putExtra(AegisVpnService.EXTRA_ENDPOINT, endpoint);
         startService(intent);
 
         mIsConnected = true;
@@ -292,7 +277,7 @@ public class MainActivity extends Activity {
         mStatusText.setText("Protected via Starlink LEO");
         mStatusText.setTextColor(Color.parseColor("#30D158"));
 
-        Toast.makeText(this, "🛡️ Connected to Aegis Network", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Connected to Aegis Network", Toast.LENGTH_SHORT).show();
     }
 
     private void disconnectShield() {
@@ -339,39 +324,6 @@ public class MainActivity extends Activity {
         tv.setLetterSpacing(0.08f);
         tv.setPadding(0, 0, 0, dpToPx(10));
         return tv;
-    }
-
-    private LinearLayout createTableRow(String label, String value, boolean isGreen) {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setPadding(0, dpToPx(8), 0, dpToPx(8));
-
-        TextView lbl = new TextView(this);
-        lbl.setText(label);
-        lbl.setTextColor(Color.parseColor("#8E8E93"));
-        lbl.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        LinearLayout.LayoutParams p1 = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
-        lbl.setLayoutParams(p1);
-
-        TextView val = new TextView(this);
-        val.setText(value);
-        val.setTextColor(isGreen ? Color.parseColor("#30D158") : Color.WHITE);
-        val.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        val.setTypeface(null, Typeface.BOLD);
-        val.setGravity(Gravity.END);
-
-        row.addView(lbl);
-        row.addView(val);
-        return row;
-    }
-
-    private View createDivider() {
-        View v = new View(this);
-        v.setBackgroundColor(Color.parseColor("#2C2C2E"));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(1));
-        v.setLayoutParams(params);
-        return v;
     }
 
     private int dpToPx(int dp) {

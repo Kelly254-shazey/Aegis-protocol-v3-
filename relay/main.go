@@ -145,9 +145,44 @@ func main() {
 
 	// Downlink Client Queues: clientIP -> *ClientQueue
 	var clientQueues sync.Map
+	var lastClientAddr sync.Map // clientIP -> net.Addr
 
 	// 4. Server Transport Reference
 	var server *transport.Server
+
+	enqueueDownlink := func(destIP string, rawIPv4Packet []byte) {
+		val, ok := clientQueues.Load(destIP)
+		if !ok {
+			enc, _ := fec.NewEncoder(10, 1)
+			val, _ = clientQueues.LoadOrStore(destIP, &ClientQueue{
+				destIP:    destIP,
+				encoder:   enc,
+				batch:     make([][]byte, 0, 10),
+				lastFlush: time.Now(),
+			})
+		}
+
+		cq := val.(*ClientQueue)
+		cq.mu.Lock()
+		cq.batch = append(cq.batch, rawIPv4Packet)
+		bytesDownlink.Add(int64(len(rawIPv4Packet)))
+
+		if len(cq.batch) >= 10 || time.Since(cq.lastFlush) > 5*time.Millisecond {
+			shards, err := cq.encoder.EncodeBlock(cq.batch)
+			if err == nil && server != nil {
+				for _, s := range shards {
+					wire := s.Encode()
+					_ = server.SendToVirtualIP(destIP, wire)
+				}
+			}
+			cq.batch = cq.batch[:0]
+			cq.lastFlush = time.Now()
+		}
+		cq.mu.Unlock()
+	}
+
+	nat := NewUserspaceNAT(enqueueDownlink)
+	defer nat.Close()
 
 	// 5. FEC Decoder for Incoming Traffic (Mobile -> Cloud Relay -> Internet)
 	decoder := fec.NewDecoder(3*time.Second, func(blockID uint32, packets [][]byte) {
@@ -170,6 +205,8 @@ func main() {
 					})
 					log.Printf("[+] Registered active client session for virtual IP: %s", srcIP)
 				}
+				// Pass packet to Userspace NAT (ICMP, DNS/UDP, TCP to WAN)
+				nat.IngestPacket(pkt)
 			}
 
 			if tunDev != nil {
@@ -185,6 +222,9 @@ func main() {
 		if len(payload) == 0 {
 			return
 		}
+
+		server.RegisterRoute("10.77.77.2", clientAddr)
+		lastClientAddr.Store("10.77.77.2", clientAddr)
 
 		// Check for Auth Ticket
 		if payload[0] == byte(transport.TypeAuthTicket) && len(payload) > 1 {
@@ -212,6 +252,31 @@ func main() {
 		log.Fatalf("[X] Failed to start Aegis Cloud Relay: %v", err)
 	}
 	defer server.Close()
+
+	// 6b. Periodic Downlink Batch Flush Timer (Sub-5ms response latency)
+	go func() {
+		ticker := time.NewTicker(5 * time.Millisecond)
+		defer ticker.Stop()
+		for range ticker.C {
+			clientQueues.Range(func(key, val any) bool {
+				cq := val.(*ClientQueue)
+				cq.mu.Lock()
+				if len(cq.batch) > 0 {
+					shards, err := cq.encoder.EncodeBlock(cq.batch)
+					if err == nil && server != nil {
+						for _, s := range shards {
+							wire := s.Encode()
+							_ = server.SendToVirtualIP(cq.destIP, wire)
+						}
+					}
+					cq.batch = cq.batch[:0]
+					cq.lastFlush = time.Now()
+				}
+				cq.mu.Unlock()
+				return true
+			})
+		}
+	}()
 
 	// 7. Downlink Loop: Read responses from TUN (Internet -> Cloud Relay -> Mobile)
 	if tunDev != nil {

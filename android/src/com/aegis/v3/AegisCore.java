@@ -22,14 +22,14 @@ public class AegisCore {
     }
 
     // Canonical JNI Native Bindings
-    public static native int startEngineNative(String endpoint, String serverName, int tunFd);
+    public static native int startEngineNative(String endpoint, String serverName, int tunFd, int socketFd);
     public static native void updateTelemetryNative(int rsrp, int rsrq, int rssnr, double loss);
     public static native void stopEngineNative();
 
     // Friendly Wrapper Methods
-    public static int start(String endpoint, String serverName, int tunFd) {
+    public static int start(String endpoint, String serverName, int tunFd, int socketFd) {
         if (!sLibraryLoaded) return -1;
-        return startEngineNative(endpoint, serverName, tunFd);
+        return startEngineNative(endpoint, serverName, tunFd, socketFd);
     }
 
     public static void updateTelemetry(int rsrp, int rsrq, int rssnr, double loss) {

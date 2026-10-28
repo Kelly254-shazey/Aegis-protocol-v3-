@@ -84,10 +84,12 @@ public class AegisVpnService extends VpnService {
             mTransportSocket = new DatagramSocket();
             protect(mTransportSocket);
 
+            ParcelFileDescriptor pfd = ParcelFileDescriptor.fromDatagramSocket(mTransportSocket);
+            int socketFd = pfd.detachFd();
             int tunFd = mInterface.detachFd();
 
             // 3. Start Native Go Aegis Core Engine
-            int res = AegisCore.start(endpoint, serverName, tunFd);
+            int res = AegisCore.start(endpoint, serverName, tunFd, socketFd);
             if (res != 0) {
                 Log.e(TAG, "Native AegisCore engine failed to initialize: " + res);
                 disconnectTunnel();
@@ -146,10 +148,10 @@ public class AegisVpnService extends VpnService {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                     CHANNEL_ID,
-                    "Aegis Shield Active",
+                    "Aegis Network",
                     NotificationManager.IMPORTANCE_LOW
             );
-            channel.setDescription("Maintains encrypted tunnel and FEC parity monitoring");
+            channel.setDescription("Connection status");
             NotificationManager nm = getSystemService(NotificationManager.class);
             if (nm != null) nm.createNotificationChannel(channel);
         }
@@ -166,8 +168,8 @@ public class AegisVpnService extends VpnService {
                 new Notification.Builder(this, CHANNEL_ID) :
                 new Notification.Builder(this);
 
-        return builder.setContentTitle("Aegis Protocol v3 Active")
-                      .setContentText("Shielding all apps with Reed-Solomon FEC + QUIC")
+        return builder.setContentTitle("Aegis Network")
+                      .setContentText("Connected • Starlink Direct LEO")
                       .setSmallIcon(android.R.drawable.ic_dialog_info)
                       .setContentIntent(pendingIntent)
                       .setOngoing(true)
