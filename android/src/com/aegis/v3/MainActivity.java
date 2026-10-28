@@ -28,7 +28,7 @@ public class MainActivity extends Activity {
     private static final String PREFS_NAME = "aegis_v3_prefs";
     private static final String KEY_ENDPOINT = "relay_endpoint";
     private static final String KEY_ACCESS_KEY = "access_pass_key";
-    private static final String DEFAULT_ENDPOINT = "172.209.217.140:443";
+    private static final String DEFAULT_ENDPOINT = "172.209.217.140:51820";
     private static final String DEFAULT_KEY = "AEGIS-V3.STARLINK-PREMIUM-PASS";
 
     private boolean mIsConnected = false;
