@@ -13,6 +13,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -33,10 +34,18 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         mPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
 
-        // Root Layout
+        // Root ScrollView to fill entire modern Android screen
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT));
+        scrollView.setBackgroundColor(Color.parseColor("#060913"));
+        scrollView.setFillViewport(true);
+
+        // Content Layout
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(Color.parseColor("#060913"));
+        root.setLayoutParams(new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         root.setPadding(48, 64, 48, 48);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
 
@@ -64,8 +73,11 @@ public class MainActivity extends Activity {
         mStatusBadge.setTextSize(14);
         mStatusBadge.setTypeface(null, Typeface.BOLD);
         mStatusBadge.setBackgroundColor(Color.parseColor("#181424"));
-        mStatusBadge.setPadding(32, 16, 32, 16);
+        mStatusBadge.setPadding(32, 20, 32, 20);
         mStatusBadge.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        mStatusBadge.setLayoutParams(badgeParams);
         root.addView(mStatusBadge);
 
         // Endpoint Config
@@ -74,14 +86,20 @@ public class MainActivity extends Activity {
         endpointLabel.setTextColor(Color.parseColor("#94A3B8"));
         endpointLabel.setTextSize(11);
         endpointLabel.setPadding(0, 48, 0, 8);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        endpointLabel.setLayoutParams(labelParams);
         root.addView(endpointLabel);
 
         mEndpointInput = new EditText(this);
-        mEndpointInput.setText(mPrefs.getString(KEY_ENDPOINT, "172.209.217.140:443"));
+        mEndpointInput.setText(mPrefs.getString(KEY_ENDPOINT, "192.168.1.119:4433"));
         mEndpointInput.setTextColor(Color.WHITE);
         mEndpointInput.setBackgroundColor(Color.parseColor("#0F172A"));
         mEndpointInput.setPadding(24, 24, 24, 24);
         mEndpointInput.setTextSize(14);
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        mEndpointInput.setLayoutParams(inputParams);
         root.addView(mEndpointInput);
 
         // Connect Button
@@ -117,9 +135,13 @@ public class MainActivity extends Activity {
         mMetricsText.setPadding(32, 32, 32, 32);
         mMetricsText.setTextSize(12);
         mMetricsText.setLineSpacing(8, 1);
+        LinearLayout.LayoutParams metricsParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        mMetricsText.setLayoutParams(metricsParams);
         root.addView(mMetricsText);
 
-        setContentView(root);
+        scrollView.addView(root);
+        setContentView(scrollView);
     }
 
     private void prepareAndConnect() {

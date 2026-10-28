@@ -36,6 +36,8 @@ Write-Host "[2/6] Linking resources & generating R.java..." -ForegroundColor Yel
 & $Aapt2 link -o "$BuildDir\unaligned.apk" `
     -I $AndroidJar `
     --manifest (Join-Path $AppDir "AndroidManifest.xml") `
+    --min-sdk-version 26 `
+    --target-sdk-version 34 `
     --java "$BuildDir\gen" `
     --auto-add-overlay `
     "$BuildDir\compiled_res\res.zip"
@@ -77,7 +79,7 @@ if (-not (Test-Path $Keystore)) {
 }
 
 $FinalApk = Join-Path $BuildDir "AegisV3.apk"
-& $ApkSigner sign --ks $Keystore --ks-pass pass:android --key-pass pass:android --out $FinalApk "$BuildDir\aligned.apk"
+& $ApkSigner sign --ks $Keystore --ks-pass pass:android --key-pass pass:android --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out $FinalApk "$BuildDir\aligned.apk"
 
 # Verify signature
 & $ApkSigner verify -v $FinalApk
