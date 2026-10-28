@@ -91,8 +91,20 @@ net.ipv4.tcp_syncookies = 1
 EOF
 sysctl --system > /dev/null 2>&1 || true
 
-# 5. Linux iptables NAT Masquerade
-echo "[5/6] Configuring WAN routing for virtual tunnel (10.77.77.0/24)..."
+# 5. Linux Firewall & iptables NAT Masquerade
+echo "[5/6] Opening inbound firewall ports and configuring WAN routing..."
+iptables -I INPUT 1 -p udp --dport 443 -j ACCEPT
+iptables -I INPUT 1 -p udp --dport 51820 -j ACCEPT
+iptables -I INPUT 1 -p tcp --dport 443 -j ACCEPT
+iptables -I INPUT 1 -p tcp --dport 8080 -j ACCEPT
+
+if command -v ufw &> /dev/null; then
+    ufw allow 443/udp 2>/dev/null || true
+    ufw allow 51820/udp 2>/dev/null || true
+    ufw allow 443/tcp 2>/dev/null || true
+    ufw allow 8080/tcp 2>/dev/null || true
+fi
+
 WAN_INT=$(ip route | grep default | awk '{print $5}' | head -n1)
 if [ -z "$WAN_INT" ]; then WAN_INT="eth0"; fi
 

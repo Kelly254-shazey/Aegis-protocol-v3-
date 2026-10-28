@@ -88,8 +88,10 @@ func (s *Server) acceptLoop() {
 func (s *Server) handleClient(conn *quic.Conn) {
 	addrKey := conn.RemoteAddr().String()
 	s.clientsByAddr.Store(addrKey, conn)
+	log.Printf("[+] New QUIC client session connected: %s", addrKey)
 
 	defer func() {
+		log.Printf("[-] QUIC client session disconnected: %s", addrKey)
 		s.clientsByAddr.Delete(addrKey)
 		// Clean up routeTable entries pointing to this addrKey
 		s.routeTable.Range(func(key, value any) bool {
