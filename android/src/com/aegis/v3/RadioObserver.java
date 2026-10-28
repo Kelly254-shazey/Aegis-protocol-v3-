@@ -92,11 +92,11 @@ public class RadioObserver {
         double estimatedLoss = (level <= 1) ? 8.0 : (level == 2 ? 3.0 : 0.2);
 
         // Feed to Go engine
-        AegisCore.updateRadioTelemetry(mLastRSRP, mLastRSRQ, mLastRSSNR, estimatedLoss);
+        AegisCore.updateTelemetry(mLastRSRP, mLastRSRQ, mLastRSSNR, estimatedLoss);
     }
 
     private void dispatchTelemetry() {
         double estimatedLoss = (mLastRSRP < -110) ? 10.0 : (mLastRSRP < -100 ? 4.0 : 0.5);
-        AegisCore.updateRadioTelemetry(mLastRSRP, mLastRSRQ, mLastRSSNR, estimatedLoss);
+        AegisCore.updateTelemetry(mLastRSRP, mLastRSRQ, mLastRSSNR, estimatedLoss);
     }
 }

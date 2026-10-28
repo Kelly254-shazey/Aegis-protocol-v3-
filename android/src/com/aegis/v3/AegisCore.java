@@ -21,7 +21,24 @@ public class AegisCore {
         return sLibraryLoaded;
     }
 
-    public static native int startEngine(String endpoint, String serverName, int tunFd);
-    public static native void updateRadioTelemetry(int rsrp, int rsrq, int rssnr, double loss);
-    public static native void stopEngine();
+    // Canonical JNI Native Bindings
+    public static native int startEngineNative(String endpoint, String serverName, int tunFd);
+    public static native void updateTelemetryNative(int rsrp, int rsrq, int rssnr, double loss);
+    public static native void stopEngineNative();
+
+    // Friendly Wrapper Methods
+    public static int start(String endpoint, String serverName, int tunFd) {
+        if (!sLibraryLoaded) return -1;
+        return startEngineNative(endpoint, serverName, tunFd);
+    }
+
+    public static void updateTelemetry(int rsrp, int rsrq, int rssnr, double loss) {
+        if (!sLibraryLoaded) return;
+        updateTelemetryNative(rsrp, rsrq, rssnr, loss);
+    }
+
+    public static void stop() {
+        if (!sLibraryLoaded) return;
+        stopEngineNative();
+    }
 }

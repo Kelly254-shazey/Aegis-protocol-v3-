@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aegis Protocol v3 — Customer Activation Portal</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background: #060913; color: #F8FAFC; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .card { background: #0F172A; border: 1px solid #1E293B; border-radius: 16px; width: 100%; max-width: 440px; padding: 36px 28px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+        .brand { text-align: center; margin-bottom: 28px; }
+        .brand h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; color: #FFFFFF; }
+        .brand p { color: #818CF8; font-size: 13px; margin-top: 6px; }
+        .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }
+        .plan-btn { background: #1E293B; border: 2px solid transparent; border-radius: 10px; padding: 14px 8px; text-align: center; cursor: pointer; color: #CBD5E1; transition: all 0.2s; }
+        .plan-btn.active { border-color: #6366F1; background: #2E1065; color: #FFFFFF; }
+        .plan-btn .name { font-size: 12px; font-weight: 700; text-transform: uppercase; }
+        .plan-btn .price { font-size: 15px; font-weight: 800; margin-top: 4px; color: #38BDF8; }
+        .field { margin-bottom: 20px; }
+        .field label { display: block; font-size: 12px; font-weight: 600; color: #94A3B8; margin-bottom: 8px; text-transform: uppercase; }
+        .field input { width: 100%; background: #080D1A; border: 1px solid #334155; border-radius: 8px; padding: 14px 16px; color: #FFFFFF; font-size: 15px; outline: none; }
+        .field input:focus { border-color: #6366F1; }
+        .submit-btn { width: 100%; background: #4F46E5; color: white; border: none; border-radius: 10px; padding: 16px; font-size: 15px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+        .submit-btn:hover { background: #4338CA; }
+        .result-box { display: none; margin-top: 24px; background: #080D1A; border: 1px solid #10B981; border-radius: 10px; padding: 16px; }
+        .result-box.error { border-color: #EF4444; }
+        .result-title { font-size: 13px; font-weight: 700; color: #10B981; margin-bottom: 6px; }
+        .pass-code { font-family: monospace; font-size: 11px; word-break: break-all; color: #CBD5E1; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="brand">
+            <h1>AEGIS PROTOCOL v3</h1>
+            <p>High-Speed Autonomous Network Accelerator</p>
+        </div>
+
+        <div class="plans">
+            <div class="plan-btn active" onclick="selectPlan('solo', '300 KES', this)">
+                <div class="name">Solo</div>
+                <div class="price">300 KES</div>
+            </div>
+            <div class="plan-btn" onclick="selectPlan('duo', '500 KES', this)">
+                <div class="name">Duo</div>
+                <div class="price">500 KES</div>
+            </div>
+            <div class="plan-btn" onclick="selectPlan('home', '1000 KES', this)">
+                <div class="name">Home</div>
+                <div class="price">1000 KES</div>
+            </div>
+        </div>
+
+        <div class="field">
+            <label>M-Pesa Phone Number</label>
+            <input type="tel" id="phone" placeholder="254712345678" value="2547">
+        </div>
+
+        <button class="submit-btn" onclick="payWithMPesa()">ACTIVATE 30-DAY PASS</button>
+
+        <div id="result" class="result-box">
+            <div id="resTitle" class="result-title"></div>
+            <div id="resBody" class="pass-code"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentTier = 'solo';
+        function selectPlan(tier, price, el) {
+            currentTier = tier;
+            document.querySelectorAll('.plan-btn').forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        async function payWithMPesa() {
+            const phone = document.getElementById('phone').value.trim();
+            const btn = document.querySelector('.submit-btn');
+            const resBox = document.getElementById('result');
+            const resTitle = document.getElementById('resTitle');
+            const resBody = document.getElementById('resBody');
+
+            btn.disabled = true;
+            btn.innerText = 'PROCESSING STK PUSH...';
+
+            try {
+                const resp = await fetch('/api/v3/pay/mpesa', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone_number: phone, tier: currentTier })
+                });
+                const data = await resp.json();
+
+                resBox.style.display = 'block';
+                if (data.status === 'activated') {
+                    resBox.className = 'result-box';
+                    resTitle.innerText = '✓ PASS ACTIVATED (30 DAYS)';
+                    resBody.innerText = 'Session Token:\n' + JSON.stringify(data.pass, null, 2);
+                } else {
+                    resBox.className = 'result-box error';
+                    resTitle.innerText = 'Payment Failed';
+                    resBody.innerText = data.error || 'Could not process STK push';
+                }
+            } catch (err) {
+                resBox.style.display = 'block';
+                resBox.className = 'result-box error';
+                resTitle.innerText = 'Network Error';
+                resBody.innerText = err.message;
+            } finally {
+                btn.disabled = false;
+                btn.innerText = 'ACTIVATE 30-DAY PASS';
+            }
+        }
+    </script>
+</body>
+</html>

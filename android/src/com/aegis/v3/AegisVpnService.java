@@ -85,7 +85,7 @@ public class AegisVpnService extends VpnService {
             int tunFd = mInterface.detachFd();
 
             // 3. Start Native Go Aegis Core Engine
-            int res = AegisCore.startEngine(endpoint, serverName, tunFd);
+            int res = AegisCore.start(endpoint, serverName, tunFd);
             if (res != 0) {
                 Log.e(TAG, "Native AegisCore engine failed to initialize: " + res);
                 disconnectTunnel();
@@ -111,7 +111,7 @@ public class AegisVpnService extends VpnService {
             mRadioObserver.stop();
         }
 
-        AegisCore.stopEngine();
+        AegisCore.stop();
 
         if (mTransportSocket != null) {
             mTransportSocket.close();
