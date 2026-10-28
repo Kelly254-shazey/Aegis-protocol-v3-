@@ -150,6 +150,12 @@ func handleHTTPProxy(conn net.Conn) {
 	} else {
 		// Standard HTTP GET/POST forward
 		req.RequestURI = ""
+		if req.URL.Scheme == "" {
+			req.URL.Scheme = "http"
+		}
+		if req.URL.Host == "" {
+			req.URL.Host = req.Host
+		}
 		resp, err := http.DefaultTransport.RoundTrip(req)
 		if err != nil {
 			_, _ = conn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
@@ -243,37 +249,7 @@ func main() {
 		}
 	}
 
-	// 2. Dial Cloud Edge Relay via QUIC Datagrams
-	client := transport.NewClient(*relayAddr, *serverName)
-	client.SetInsecureSkipVerify(*skipVerify)
-
-	packetConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 0})
-	if err != nil {
-		log.Fatalf("[X] Failed to create UDP socket: %v", err)
-	}
-	defer packetConn.Close()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	log.Printf("[*] Connecting to Cloud Relay %s over QUIC...", *relayAddr)
-	if err := client.Connect(ctx, packetConn); err != nil {
-		log.Printf("[!] Note: Could not immediately connect to Cloud Relay: %v. Running in local proxy mode.", err)
-	} else {
-		log.Println("[✓] Successfully connected to Aegis Cloud Edge Relay!")
-
-		// If ticket is loaded, send Auth Datagram
-		if signedTicket != nil {
-			ticketBytes, _ := os.ReadFile(*ticketArg)
-			if len(ticketBytes) > 0 {
-				authMsg := append([]byte{byte(transport.TypeAuthTicket)}, ticketBytes...)
-				_ = client.SendDatagram(authMsg)
-			}
-		}
-	}
-	defer client.Close()
-
-	// 3. Start SOCKS5 Server
+	// 2. Start SOCKS5 Server
 	socksListener, err := net.Listen("tcp", *socksAddr)
 	if err != nil {
 		log.Fatalf("[X] Failed to bind SOCKS5 listener on %s: %v", *socksAddr, err)
@@ -291,7 +267,7 @@ func main() {
 	}()
 	log.Printf("[✓] Local SOCKS5 Proxy active at %s", *socksAddr)
 
-	// 4. Start HTTP Proxy Server
+	// 3. Start HTTP Proxy Server
 	httpListener, err := net.Listen("tcp", *httpAddr)
 	if err != nil {
 		log.Fatalf("[X] Failed to bind HTTP listener on %s: %v", *httpAddr, err)
@@ -308,6 +284,37 @@ func main() {
 		}
 	}()
 	log.Printf("[✓] Local HTTP Proxy active at %s", *httpAddr)
+
+	// 4. Connect to Cloud Edge Relay in background
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		client := transport.NewClient(*relayAddr, *serverName)
+		client.SetInsecureSkipVerify(*skipVerify)
+
+		packetConn, err := net.ListenUDP("udp", &net.UDPAddr{Port: 0})
+		if err != nil {
+			return
+		}
+		defer packetConn.Close()
+
+		dialCtx, dialCancel := context.WithTimeout(ctx, 3*time.Second)
+		defer dialCancel()
+
+		if err := client.Connect(dialCtx, packetConn); err != nil {
+			log.Printf("[!] Cloud Relay connection: %v (operating in accelerated direct proxy mode)", err)
+		} else {
+			log.Println("[✓] Successfully connected to Aegis Cloud Edge Relay!")
+			if signedTicket != nil && *ticketArg != "" {
+				ticketBytes, _ := os.ReadFile(*ticketArg)
+				if len(ticketBytes) > 0 {
+					authMsg := append([]byte{byte(transport.TypeAuthTicket)}, ticketBytes...)
+					_ = client.SendDatagram(authMsg)
+				}
+			}
+		}
+	}()
 
 	// 5. Cockpit Status Refresh Loop
 	go func() {

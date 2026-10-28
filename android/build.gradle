@@ -1,0 +1,32 @@
+plugins {
+    id 'com.android.application' version '8.2.0' apply false
+}
+
+apply plugin: 'com.android.application'
+
+android {
+    namespace 'com.aegis.v3'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.aegis.v3"
+        minSdk 26
+        targetSdk 36
+        versionCode 3
+        versionName "3.0.0"
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['src']
+            res.srcDirs = ['res']
+            jniLibs.srcDirs = ['libs/jni']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+}
