@@ -1,0 +1,31 @@
+# ==============================================================================
+# Aegis Protocol v3 - Cloud Edge Relay Container
+# Builds high-performance QUIC Datagram + Reed-Solomon Relay daemon
+# ==============================================================================
+
+# Build Stage
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /src
+RUN apk add --no-cache git ca-certificates build-base
+
+# Copy core library
+COPY core/ /src/core/
+COPY relay/ /src/relay/
+
+WORKDIR /src/relay
+RUN go mod download
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /bin/aegis-relay .
+
+# Runtime Stage (Requires iproute2 and iptables for TUN configuration)
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates iptables iproute2 bash
+
+WORKDIR /opt/aegis
+COPY --from=builder /bin/aegis-relay /opt/aegis/aegis-relay
+
+EXPOSE 443/udp
+
+ENTRYPOINT ["/opt/aegis/aegis-relay"]
+CMD ["-bind", ":443", "-cert", "/opt/aegis/cert.pem", "-key", "/opt/aegis/key.pem"]

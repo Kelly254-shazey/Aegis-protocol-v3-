@@ -1,0 +1,31 @@
+# ==============================================================================
+# Aegis Protocol v3 - Control Plane & Portal Container
+# Serves M-Pesa billing API, Ed25519 session ticketing, and responsive SPA portal
+# ==============================================================================
+
+# Build Stage
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /src
+RUN apk add --no-cache git ca-certificates
+
+COPY core/ /src/core/
+COPY control/ /src/control/
+
+WORKDIR /src/control
+RUN go mod download
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /bin/aegis-control .
+
+# Runtime Stage
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /opt/aegis
+COPY --from=builder /bin/aegis-control /opt/aegis/aegis-control
+COPY portal/ /opt/aegis/portal/
+
+EXPOSE 8080/tcp
+
+ENTRYPOINT ["/opt/aegis/aegis-control"]
+CMD ["-port", ":8080", "-portal-dir", "/opt/aegis/portal"]

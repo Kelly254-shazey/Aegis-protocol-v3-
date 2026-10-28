@@ -1,0 +1,39 @@
+services:
+  # Cloud Edge Relay: RFC 9221 QUIC Datagrams + Reed-Solomon Parity + Linux TUN
+  aegis-relay:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.relay
+    container_name: aegis-relay
+    restart: unless-stopped
+    network_mode: "host"
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    volumes:
+      - ./certs:/opt/aegis/certs:ro
+    environment:
+      - BIND_ADDR=:443
+    command: >
+      -bind :443 
+      -tun tun0 
+      -tun-ip 10.77.77.1/24 
+      -mtu 1280
+
+  # Control Plane & Customer Activation Portal
+  aegis-control:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.control
+    container_name: aegis-control
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../portal:/opt/aegis/portal:ro
+    environment:
+      - PORT=:8080
+    command: >
+      -port :8080 
+      -portal-dir /opt/aegis/portal

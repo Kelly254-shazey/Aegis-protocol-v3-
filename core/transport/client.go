@@ -16,7 +16,7 @@ var (
 	ErrNotConnected = errors.New("transport: client is not connected to cloud relay")
 )
 
-// Client handles the QUIC connection from the mobile device to the Cloud Edge Relay.
+// Client handles the QUIC connection from the mobile or desktop device to the Cloud Edge Relay.
 type Client struct {
 	mu           sync.RWMutex
 	endpoint     string
@@ -28,26 +28,48 @@ type Client struct {
 	cancel       context.CancelFunc
 }
 
-// NewClient initializes a mobile QUIC transport client.
+// NewClient initializes a QUIC transport client with default secure TLS configuration.
 func NewClient(endpoint string, serverName string) *Client {
+	return NewClientWithTLS(endpoint, &tls.Config{
+		ServerName:         serverName,
+		InsecureSkipVerify: false,
+		NextProtos:         []string{ALPN},
+	})
+}
+
+// NewClientWithTLS allows custom TLS certificates or dev bypass.
+func NewClientWithTLS(endpoint string, tlsConfig *tls.Config) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Client{
-		endpoint: endpoint,
-		tlsConfig: &tls.Config{
-			ServerName:         serverName,
-			InsecureSkipVerify: false, // Strict TLS verification against Relay certificate
+	if tlsConfig == nil {
+		tlsConfig = &tls.Config{
+			InsecureSkipVerify: true,
 			NextProtos:         []string{ALPN},
-		},
+		}
+	}
+	if len(tlsConfig.NextProtos) == 0 {
+		tlsConfig.NextProtos = []string{ALPN}
+	}
+
+	return &Client{
+		endpoint:  endpoint,
+		tlsConfig: tlsConfig,
 		quicConfig: &quic.Config{
-			EnableDatagrams:    true,
-			MaxIdleTimeout:     30 * time.Second,
-			KeepAlivePeriod:    10 * time.Second,
-			InitialPacketSize:  DefaultMTU,
+			EnableDatagrams:   true,
+			MaxIdleTimeout:    30 * time.Second,
+			KeepAlivePeriod:   10 * time.Second,
+			InitialPacketSize: DefaultMTU,
 		},
 		datagramChan: make(chan []byte, 1024),
 		ctx:          ctx,
 		cancel:       cancel,
 	}
+}
+
+// SetInsecureSkipVerify sets the TLS certificate verification policy.
+func (c *Client) SetInsecureSkipVerify(skip bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.tlsConfig.InsecureSkipVerify = skip
 }
 
 // Connect dials the Cloud Edge Relay over UDP on Port 443.
@@ -75,7 +97,7 @@ func (c *Client) Connect(ctx context.Context, udpConn net.PacketConn) error {
 	return nil
 }
 
-// SendDatagram sends an RFC 9221 unreliable datagram (IP packet or FEC shard) into space/cloud.
+// SendDatagram sends an RFC 9221 datagram (IP packet or FEC shard) to the Cloud Relay.
 func (c *Client) SendDatagram(payload []byte) error {
 	c.mu.RLock()
 	conn := c.connection

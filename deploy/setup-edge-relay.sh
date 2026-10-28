@@ -57,8 +57,8 @@ iptables -A FORWARD -s 10.77.77.0/24 -o "$WAN_INT" -j ACCEPT
 # Save iptables rules across reboots
 netfilter-persistent save
 
-# 5. Setup Aegis Relay Systemd Service
-echo "[*] Installing systemd daemon: aegis-relay.service..."
+# 5. Setup Aegis Relay and Control Plane Systemd Services
+echo "[*] Installing systemd daemons: aegis-relay.service and aegis-control.service..."
 cat << 'EOF' > /etc/systemd/system/aegis-relay.service
 [Unit]
 Description=Aegis Protocol v3 Cloud Edge Relay (QUIC Datagrams + BBRv3)
@@ -69,7 +69,26 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=/opt/aegis
-ExecStart=/opt/aegis/aegis-relay -bind :443 -cert /opt/aegis/cert.pem -key /opt/aegis/key.pem
+ExecStart=/opt/aegis/aegis-relay -bind :443 -cert /opt/aegis/cert.pem -key /opt/aegis/key.pem -tun tun0 -tun-ip 10.77.77.1/24 -mtu 1280
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat << 'EOF' > /etc/systemd/system/aegis-control.service
+[Unit]
+Description=Aegis Protocol v3 Control Plane & Portal
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/aegis
+ExecStart=/opt/aegis/aegis-control -port :8080 -portal-dir /opt/aegis/portal
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
@@ -79,10 +98,11 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-mkdir -p /opt/aegis
+mkdir -p /opt/aegis/portal
 
 echo "=================================================================="
 echo "🎉 AEGIS v3 CLOUD EDGE RELAY PROVISIONING COMPLETE!"
-echo "Place 'aegis-relay' binary in /opt/aegis/ and run:"
+echo "Place binaries in /opt/aegis/ and run:"
 echo "  systemctl enable --now aegis-relay"
+echo "  systemctl enable --now aegis-control"
 echo "=================================================================="

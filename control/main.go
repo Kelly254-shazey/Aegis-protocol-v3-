@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -45,11 +46,24 @@ func (cs *ControlServer) HandleMPesaSTKPush(w http.ResponseWriter, r *http.Reque
 
 	var req struct {
 		PhoneNumber string `json:"phone_number"` // e.g. 254712345678
+		Phone       string `json:"phone"`
 		Tier        string `json:"tier"`         // "solo", "duo", "home"
+		Plan        string `json:"plan"`
+		Amount      int    `json:"amount"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid payload", http.StatusBadRequest)
 		return
+	}
+
+	if req.PhoneNumber == "" {
+		req.PhoneNumber = req.Phone
+	}
+	if req.Tier == "" {
+		req.Tier = req.Plan
+	}
+	if req.Tier == "" {
+		req.Tier = "duo"
 	}
 
 	maxDev := 1
@@ -82,6 +96,7 @@ func (cs *ControlServer) HandleMPesaSTKPush(w http.ResponseWriter, r *http.Reque
 		"status":  "activated",
 		"message": "Shield pass issued. Ready to connect.",
 		"pass":    signedPass,
+		"ticket":  signedPass,
 		"pubKey":  base64.StdEncoding.EncodeToString(cs.portalPubKey),
 	})
 }
@@ -131,6 +146,7 @@ func (cs *ControlServer) gcChallenges() {
 
 func main() {
 	port := flag.String("port", ":8080", "Control Plane HTTP Port")
+	portalDir := flag.String("portal-dir", "../portal", "Path to portal static web assets")
 	flag.Parse()
 
 	cs, err := NewControlServer()
@@ -141,6 +157,13 @@ func main() {
 	http.HandleFunc("/api/v3/pay/mpesa", cs.HandleMPesaSTKPush)
 	http.HandleFunc("/api/v3/device/pair-qr", cs.HandlePairingQR)
 	http.HandleFunc("/api/v3/status", cs.HandleStatus)
+
+	// Serve portal static assets
+	if info, err := os.Stat(*portalDir); err == nil && info.IsDir() {
+		fs := http.FileServer(http.Dir(*portalDir))
+		http.Handle("/", fs)
+		log.Printf("[✓] Serving Customer Web Portal from %s", *portalDir)
+	}
 
 	log.Printf("🛡️ Aegis Protocol v3 Control Plane running on %s", *port)
 	if err := http.ListenAndServe(*port, nil); err != nil {

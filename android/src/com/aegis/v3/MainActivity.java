@@ -111,7 +111,7 @@ public class MainActivity extends Activity {
 
         // Live Metrics Card
         mMetricsText = new TextView(this);
-        mMetricsText.setText("• Protocol: RFC 9221 QUIC Datagrams\n• Encryption: ChaCha20-Poly1305 / TLS 1.3\n• FEC Parity: Adaptive (10:1 to 6:4)\n• Congestion Control: Google BBRv3\n• MTU: 1280 (Carrier Fragment-Free)");
+        mMetricsText.setText("• Protocol: RFC 9221 QUIC Datagrams\n• Encryption: ChaCha20-Poly1305 / TLS 1.3\n• FEC Parity: Adaptive (10:1 to 6:4)\n• Congestion Control: Google BBRv3\n• MTU: 1280 (Carrier Fragment-Free)\n• Hotspot Bridge: 0.0.0.0:8080 (WPAD/SOCKS5)");
         mMetricsText.setTextColor(Color.parseColor("#64748B"));
         mMetricsText.setBackgroundColor(Color.parseColor("#080D1A"));
         mMetricsText.setPadding(32, 32, 32, 32);

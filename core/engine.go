@@ -101,31 +101,53 @@ func (e *Engine) Start(relayEndpoint string, serverName string, tunFd int) error
 
 // outboundLoop reads IP packets from Android tun0, encodes them into FEC shards, and sends QUIC datagrams.
 func (e *Engine) outboundLoop() {
-	buf := make([]byte, 1500)
-	packetBatch := make([][]byte, 0, 10)
-	batchTicker := time.NewTicker(5 * time.Millisecond)
-	defer batchTicker.Stop()
+	readChan := make(chan []byte, 128)
 
-	for e.isRunning.Load() {
-		select {
-		case <-e.ctx.Done():
-			return
-		default:
+	// Background reader goroutine: blocks on tunFile.Read without starving batch timer
+	go func() {
+		buf := make([]byte, 1500)
+		for e.isRunning.Load() {
 			n, err := e.tunFile.Read(buf)
 			if err != nil {
+				close(readChan)
 				return
 			}
 			if n > 0 {
 				pkt := make([]byte, n)
 				copy(pkt, buf[:n])
-				packetBatch = append(packetBatch, pkt)
-				e.bytesUp.Add(int64(n))
-
-				strategy := e.adaptive.Current()
-				if len(packetBatch) >= strategy.DataShards {
-					e.flushBatch(packetBatch)
-					packetBatch = packetBatch[:0]
+				select {
+				case readChan <- pkt:
+				case <-e.ctx.Done():
+					return
 				}
+			}
+		}
+	}()
+
+	packetBatch := make([][]byte, 0, 10)
+	batchTicker := time.NewTicker(5 * time.Millisecond)
+	defer batchTicker.Stop()
+
+	for {
+		select {
+		case <-e.ctx.Done():
+			return
+		case pkt, ok := <-readChan:
+			if !ok {
+				return
+			}
+			packetBatch = append(packetBatch, pkt)
+			e.bytesUp.Add(int64(len(pkt)))
+
+			strategy := e.adaptive.Current()
+			if len(packetBatch) >= strategy.DataShards {
+				e.flushBatch(packetBatch)
+				packetBatch = packetBatch[:0]
+			}
+		case <-batchTicker.C:
+			if len(packetBatch) > 0 {
+				e.flushBatch(packetBatch)
+				packetBatch = packetBatch[:0]
 			}
 		}
 	}
@@ -172,6 +194,16 @@ func (e *Engine) UpdateRadioMetrics(rsrp, rsrq, rssnr int, cellID, networkType s
 	if e.adaptive != nil {
 		e.adaptive.UpdateMetrics(loss)
 	}
+}
+
+// Metrics returns current counters (bytesUp, bytesDown, recoveredPackets).
+func (e *Engine) Metrics() (int64, int64, int64) {
+	return e.bytesUp.Load(), e.bytesDown.Load(), e.recoveredPkt.Load()
+}
+
+// IsRunning returns whether the engine is currently active.
+func (e *Engine) IsRunning() bool {
+	return e.isRunning.Load()
 }
 
 // Stop shuts down the engine cleanly.

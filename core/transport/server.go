@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -11,7 +12,11 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// Server handles incoming QUIC connections from mobile devices at the Cloud Edge.
+var (
+	ErrClientNotFound = errors.New("transport: client connection not found")
+)
+
+// Server handles incoming QUIC connections from mobile devices and laptops at the Cloud Edge.
 type Server struct {
 	mu           sync.RWMutex
 	bindAddr     string
@@ -21,6 +26,12 @@ type Server struct {
 	onDatagram   func(clientAddr net.Addr, payload []byte)
 	ctx          context.Context
 	cancel       context.CancelFunc
+
+	// Active client connections indexed by clientAddr string
+	clientsByAddr sync.Map // string -> *quic.Conn
+
+	// Routing table mapping virtual IP (e.g. "10.77.77.2") -> clientAddr string
+	routeTable sync.Map // string -> string
 }
 
 // NewServer initializes a Cloud Edge Relay listener.
@@ -62,7 +73,7 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// acceptLoop accepts new incoming client connections from mobile devices.
+// acceptLoop accepts new incoming client connections.
 func (s *Server) acceptLoop() {
 	for {
 		conn, err := s.listener.Accept(s.ctx)
@@ -73,11 +84,22 @@ func (s *Server) acceptLoop() {
 	}
 }
 
-// handleClient continuously processes datagrams from an individual client connection.
+// handleClient registers and continuously processes datagrams from an individual client connection.
 func (s *Server) handleClient(conn *quic.Conn) {
-	defer conn.CloseWithError(0, "session ended")
+	addrKey := conn.RemoteAddr().String()
+	s.clientsByAddr.Store(addrKey, conn)
 
-	clientAddr := conn.RemoteAddr()
+	defer func() {
+		s.clientsByAddr.Delete(addrKey)
+		// Clean up routeTable entries pointing to this addrKey
+		s.routeTable.Range(func(key, value any) bool {
+			if value.(string) == addrKey {
+				s.routeTable.Delete(key)
+			}
+			return true
+		})
+		_ = conn.CloseWithError(0, "session ended")
+	}()
 
 	for {
 		data, err := conn.ReceiveDatagram(s.ctx)
@@ -86,12 +108,76 @@ func (s *Server) handleClient(conn *quic.Conn) {
 		}
 
 		if s.onDatagram != nil {
-			s.onDatagram(clientAddr, data)
+			s.onDatagram(conn.RemoteAddr(), data)
 		}
 	}
 }
 
-// Close gracefully stops the Cloud Edge Relay listener.
+// RegisterRoute associates a virtual IP address (e.g. "10.77.77.2") with a physical client address.
+func (s *Server) RegisterRoute(virtualIP string, clientAddr net.Addr) {
+	if virtualIP != "" && clientAddr != nil {
+		s.routeTable.Store(virtualIP, clientAddr.String())
+	}
+}
+
+// SendDatagram sends a raw datagram payload to a specific client address.
+func (s *Server) SendDatagram(clientAddr net.Addr, payload []byte) error {
+	if clientAddr == nil {
+		return ErrClientNotFound
+	}
+	val, ok := s.clientsByAddr.Load(clientAddr.String())
+	if !ok {
+		return ErrClientNotFound
+	}
+	conn := val.(*quic.Conn)
+	return conn.SendDatagram(payload)
+}
+
+// SendToVirtualIP routes a datagram to the client holding the specified virtual IP address.
+func (s *Server) SendToVirtualIP(virtualIP string, payload []byte) error {
+	val, ok := s.routeTable.Load(virtualIP)
+	if !ok {
+		// Fallback: If only 1 client is connected, route to it
+		var fallbackConn *quic.Conn
+		count := 0
+		s.clientsByAddr.Range(func(k, v any) bool {
+			fallbackConn = v.(*quic.Conn)
+			count++
+			return count <= 1
+		})
+		if count == 1 && fallbackConn != nil {
+			return fallbackConn.SendDatagram(payload)
+		}
+		return ErrClientNotFound
+	}
+	addrKey := val.(string)
+	connVal, ok := s.clientsByAddr.Load(addrKey)
+	if !ok {
+		return ErrClientNotFound
+	}
+	return connVal.(*quic.Conn).SendDatagram(payload)
+}
+
+// BroadcastDatagram delivers a datagram to all currently connected clients.
+func (s *Server) BroadcastDatagram(payload []byte) {
+	s.clientsByAddr.Range(func(k, v any) bool {
+		conn := v.(*quic.Conn)
+		_ = conn.SendDatagram(payload)
+		return true
+	})
+}
+
+// ConnectedClientCount returns the number of active clients.
+func (s *Server) ConnectedClientCount() int {
+	count := 0
+	s.clientsByAddr.Range(func(k, v any) bool {
+		count++
+		return true
+	})
+	return count
+}
+
+// Close gracefully stops the Cloud Edge Relay listener and all active sessions.
 func (s *Server) Close() error {
 	s.cancel()
 	s.mu.Lock()

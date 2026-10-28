@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aegis Protocol v3 — Customer Activation Portal</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-badge">🛡️ AEGIS PROTOCOL v3</div>
+      <h1>Accelerate Your Reality</h1>
+      <p class="subtitle">
+        Eliminate packet loss, bypass ISP throttling, and unlock zero-drop satellite-grade 
+        QUIC transport across phones, laptops, and field gear.
+      </p>
+    </header>
+
+    <!-- Global Telemetry Bar -->
+    <div class="telemetry-bar">
+      <div class="telemetry-item">
+        <span class="dot"></span>
+        <div>
+          <div class="telemetry-label">Nairobi Edge Relay</div>
+          <div class="telemetry-value">ONLINE (12 ms)</div>
+        </div>
+      </div>
+      <div class="telemetry-item">
+        <span class="dot"></span>
+        <div>
+          <div class="telemetry-label">Transport Protocol</div>
+          <div class="telemetry-value">RFC 9221 QUIC + FEC</div>
+        </div>
+      </div>
+      <div class="telemetry-item">
+        <span class="dot"></span>
+        <div>
+          <div class="telemetry-label">Congestion Engine</div>
+          <div class="telemetry-value">Google BBRv3</div>
+        </div>
+      </div>
+      <div class="telemetry-item">
+        <span class="dot"></span>
+        <div>
+          <div class="telemetry-label">Active Handshakes</div>
+          <div class="telemetry-value">1,482 Nodes</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tier Selection -->
+    <h2 class="section-title">⚡ 1. Choose Your Aegis Shield Tier</h2>
+    <div class="plans-grid">
+      <!-- Solo -->
+      <div class="plan-card" data-plan="solo" data-price="1500">
+        <div class="plan-title">Solo Shield</div>
+        <div class="plan-desc">For mobile pros & travelers on standard smartphones</div>
+        <div class="plan-price">KES 1,500 <span>/ month</span></div>
+        <ul class="plan-features">
+          <li>✓ 1 Active Smartphone</li>
+          <li>✓ Reed-Solomon Adaptive Parity</li>
+          <li>✓ Zero-Drop Cell Handover</li>
+          <li>✓ Android Native Client</li>
+        </ul>
+        <button class="btn">Select Solo</button>
+      </div>
+
+      <!-- Duo (Popular) -->
+      <div class="plan-card selected" data-plan="duo" data-price="2500">
+        <div class="plan-popular">Most Popular</div>
+        <div class="plan-title">Duo Pass</div>
+        <div class="plan-desc">For professionals with a phone + laptop workstation</div>
+        <div class="plan-price">KES 2,500 <span>/ month</span></div>
+        <ul class="plan-features">
+          <li>✓ 2 Active Devices (Phone + Laptop)</li>
+          <li>✓ QR Instant Pairing & SOCKS5 Bridge</li>
+          <li>✓ Hotspot Tethering Accelerator</li>
+          <li>✓ High-Priority BBRv3 Queue</li>
+        </ul>
+        <button class="btn">Select Duo</button>
+      </div>
+
+      <!-- Home Mesh -->
+      <div class="plan-card" data-plan="home" data-price="4500">
+        <div class="plan-title">Home / Team Mesh</div>
+        <div class="plan-desc">For remote field offices, streaming rigs & families</div>
+        <div class="plan-price">KES 4,500 <span>/ month</span></div>
+        <ul class="plan-features">
+          <li>✓ Up to 5 Devices</li>
+          <li>✓ Wi-Fi WPAD Hotspot Broadcast</li>
+          <li>✓ Direct Starlink / Direct-to-Cell Fallback</li>
+          <li>✓ 24/7 Dedicated Tunnel Priority</li>
+        </ul>
+        <button class="btn">Select Home Mesh</button>
+      </div>
+    </div>
+
+    <!-- M-Pesa Checkout Panel -->
+    <div class="checkout-panel" id="checkout-panel">
+      <h2 class="section-title">💳 2. Instant M-Pesa Activation</h2>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+        Enter your Safaricom phone number. You will receive an instant STK PIN prompt on your phone.
+      </p>
+
+      <div class="form-group">
+        <label for="phone-input">M-Pesa Mobile Number</label>
+        <input type="tel" id="phone-input" placeholder="0712345678 or 254712345678" />
+      </div>
+
+      <button class="btn" id="pay-btn">Pay KES 2,500 via M-Pesa STK Push</button>
+    </div>
+
+    <!-- Activated Pass / QR Pairing Panel -->
+    <div class="active-pass-panel" id="pass-panel">
+      <h2 style="color: var(--emerald); margin-bottom: 0.5rem;">🎉 Aegis Pass Activated!</h2>
+      <div id="pass-details" style="color: #cbd5e1; font-size: 0.95rem; margin-bottom: 1rem;"></div>
+
+      <div class="qr-box">
+        <div id="qr-container"></div>
+      </div>
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1rem;">
+        Scan this QR code from the <strong>Aegis Android App</strong> or import into the 
+        <strong>Aegis Desktop Client</strong> to activate your devices.
+      </p>
+
+      <pre class="ticket-json" id="ticket-display"></pre>
+      <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('ticket-display').textContent); alert('Session Ticket copied to clipboard!');">
+        📋 Copy Session Ticket JSON
+      </button>
+    </div>
+
+    <footer>
+      &copy; 2026 The Aegis Protocol Project. Production Layer 3/4 Overlay Accelerator.
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

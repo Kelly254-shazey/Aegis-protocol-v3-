@@ -61,3 +61,17 @@ func Verify(st *SignedTicket, portalPubKey ed25519.PublicKey) (*SessionTicket, e
 
 	return &st.Ticket, nil
 }
+
+// UnmarshalSignedTicket parses a raw JSON payload into a SignedTicket.
+func UnmarshalSignedTicket(data []byte) (*SignedTicket, error) {
+	var st SignedTicket
+	if err := json.Unmarshal(data, &st); err != nil {
+		return nil, fmt.Errorf("auth: json unmarshal error: %w", err)
+	}
+	return &st, nil
+}
+
+// Verify verifies the signature of this SignedTicket.
+func (st *SignedTicket) Verify(portalPubKey ed25519.PublicKey) (*SessionTicket, error) {
+	return Verify(st, portalPubKey)
+}

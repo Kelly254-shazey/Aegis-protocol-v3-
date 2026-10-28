@@ -1,0 +1,16 @@
+[Unit]
+Description=Aegis Protocol v3 Control Plane & Activation Portal
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/aegis
+ExecStart=/opt/aegis/aegis-control -port :8080 -portal-dir /opt/aegis/portal
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -26,6 +26,7 @@ public class AegisVpnService extends VpnService {
 
     private ParcelFileDescriptor mInterface;
     private RadioObserver mRadioObserver;
+    private HotspotBridge mHotspotBridge;
     private DatagramSocket mTransportSocket;
     private boolean mIsRunning = false;
 
@@ -33,6 +34,7 @@ public class AegisVpnService extends VpnService {
     public void onCreate() {
         super.onCreate();
         mRadioObserver = new RadioObserver(this);
+        mHotspotBridge = new HotspotBridge();
     }
 
     @Override
@@ -95,6 +97,11 @@ public class AegisVpnService extends VpnService {
             // 4. Start Radio Telemetry Observer
             mRadioObserver.start();
 
+            // 5. Start Hotspot Bridge for tethered laptops / family devices
+            if (mHotspotBridge != null) {
+                mHotspotBridge.start();
+            }
+
             mIsRunning = true;
             Log.i(TAG, "🛡️ Aegis Protocol v3 Tunnel ACTIVE via " + endpoint);
 
@@ -109,6 +116,10 @@ public class AegisVpnService extends VpnService {
 
         if (mRadioObserver != null) {
             mRadioObserver.stop();
+        }
+
+        if (mHotspotBridge != null) {
+            mHotspotBridge.stop();
         }
 
         AegisCore.stop();
