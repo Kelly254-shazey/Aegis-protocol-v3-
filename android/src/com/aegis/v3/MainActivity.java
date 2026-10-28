@@ -44,6 +44,12 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         mPrefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
 
+        // Enforce Azure Cloud Relay endpoint (override any stale local network IP)
+        String currentEndpoint = mPrefs.getString(KEY_ENDPOINT, DEFAULT_ENDPOINT);
+        if (currentEndpoint == null || currentEndpoint.startsWith("192.168.") || currentEndpoint.contains("4433") || currentEndpoint.contains(":443")) {
+            mPrefs.edit().putString(KEY_ENDPOINT, DEFAULT_ENDPOINT).apply();
+        }
+
         // Apple Deep Black Canvas
         ScrollView scrollView = new ScrollView(this);
         scrollView.setLayoutParams(new LinearLayout.LayoutParams(
@@ -262,9 +268,11 @@ public class MainActivity extends Activity {
 
     private void startShieldService() {
         String endpoint = mPrefs.getString(KEY_ENDPOINT, DEFAULT_ENDPOINT);
+        String host = endpoint.split(":")[0];
         Intent intent = new Intent(this, AegisVpnService.class);
         intent.setAction(AegisVpnService.ACTION_CONNECT);
         intent.putExtra(AegisVpnService.EXTRA_ENDPOINT, endpoint);
+        intent.putExtra(AegisVpnService.EXTRA_SERVER_NAME, host);
         startService(intent);
 
         mIsConnected = true;

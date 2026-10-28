@@ -13,6 +13,7 @@ import (
 	"log"
 	"math/big"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -205,8 +206,13 @@ func main() {
 					})
 					log.Printf("[+] Registered active client session for virtual IP: %s", srcIP)
 				}
-				// Pass packet to Userspace NAT (ICMP, DNS/UDP, TCP to WAN)
-				nat.IngestPacket(pkt)
+				if val, ok := lastClientAddr.Load("latest"); ok {
+					server.RegisterRoute(srcIP, val.(net.Addr))
+				}
+				if runtime.GOOS == "windows" {
+					// Pass packet to Userspace NAT on Windows (where no kernel TUN routing exists)
+					nat.IngestPacket(pkt)
+				}
 			}
 
 			if tunDev != nil {
@@ -225,6 +231,7 @@ func main() {
 
 		server.RegisterRoute("10.77.77.2", clientAddr)
 		lastClientAddr.Store("10.77.77.2", clientAddr)
+		lastClientAddr.Store("latest", clientAddr)
 
 		// Check for Auth Ticket
 		if payload[0] == byte(transport.TypeAuthTicket) && len(payload) > 1 {
@@ -252,6 +259,18 @@ func main() {
 		log.Fatalf("[X] Failed to start Aegis Cloud Relay: %v", err)
 	}
 	defer server.Close()
+
+	// 6a. HTTP Telemetry Status API on Port 80 (Azure NSG Rule 300)
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			fmt.Fprintf(w, `{"status":"online","protocol":"RFC9221-QUIC","clients":%d,"up_bytes":%d,"down_bytes":%d,"fec_recovered":%d}`+"\n",
+				server.ConnectedClientCount(), bytesUplink.Load(), bytesDownlink.Load(), packetsRecovered.Load())
+		})
+		_ = http.ListenAndServe(":80", mux)
+	}()
 
 	// 6b. Periodic Downlink Batch Flush Timer (Sub-5ms response latency)
 	go func() {

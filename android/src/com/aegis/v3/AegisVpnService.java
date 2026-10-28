@@ -45,8 +45,8 @@ public class AegisVpnService extends VpnService {
         if (ACTION_CONNECT.equals(action)) {
             String endpoint = intent.getStringExtra(EXTRA_ENDPOINT);
             String serverName = intent.getStringExtra(EXTRA_SERVER_NAME);
-            if (endpoint == null) endpoint = "172.209.217.140:51820";
-            if (serverName == null) serverName = "172.209.217.140";
+            if (endpoint == null || endpoint.isEmpty()) endpoint = "172.209.217.140:51820";
+            if (serverName == null || serverName.isEmpty()) serverName = endpoint.split(":")[0];
             connectTunnel(endpoint, serverName);
         } else if (ACTION_DISCONNECT.equals(action)) {
             disconnectTunnel();
