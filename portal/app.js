@@ -100,7 +100,8 @@ document.addEventListener("DOMContentLoaded", () => {
       <strong>Valid Until:</strong> ${new Date(ticket.t.exp * 1000).toLocaleDateString()}
     `;
 
-    ticketDisplay.textContent = JSON.stringify(ticket, null, 2);
+    const accessKey = "AEGIS-V3." + btoa(JSON.stringify(ticket)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+    ticketDisplay.textContent = accessKey;
 
     // Render pairing QR Code
     const qrContainer = document.getElementById("qr-container");

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -74,4 +75,27 @@ func UnmarshalSignedTicket(data []byte) (*SignedTicket, error) {
 // Verify verifies the signature of this SignedTicket.
 func (st *SignedTicket) Verify(portalPubKey ed25519.PublicKey) (*SessionTicket, error) {
 	return Verify(st, portalPubKey)
+}
+
+// ToAccessKey converts a SignedTicket into a compact copy-pasteable key: AEGIS-V3.<base64url>
+func (st *SignedTicket) ToAccessKey() (string, error) {
+	data, err := json.Marshal(st)
+	if err != nil {
+		return "", err
+	}
+	return "AEGIS-V3." + base64.RawURLEncoding.EncodeToString(data), nil
+}
+
+// ParseAccessKey parses a compact AEGIS-V3.<base64url> key or raw JSON.
+func ParseAccessKey(key string) (*SignedTicket, error) {
+	key = strings.TrimSpace(key)
+	if strings.HasPrefix(key, "AEGIS-V3.") {
+		payload := strings.TrimPrefix(key, "AEGIS-V3.")
+		data, err := base64.RawURLEncoding.DecodeString(payload)
+		if err != nil {
+			return nil, ErrMalformedToken
+		}
+		return UnmarshalSignedTicket(data)
+	}
+	return UnmarshalSignedTicket([]byte(key))
 }

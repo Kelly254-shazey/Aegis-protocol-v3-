@@ -45,6 +45,19 @@ func TestAuth_VerifyValidTicket(t *testing.T) {
 	if verified.UserID != "user-1001" {
 		t.Errorf("mismatched user ID: got %s, want user-1001", verified.UserID)
 	}
+
+	// Test Access Key formatting
+	key, err := st.ToAccessKey()
+	if err != nil {
+		t.Fatalf("failed to generate access key: %v", err)
+	}
+	parsedST, err := ParseAccessKey(key)
+	if err != nil {
+		t.Fatalf("failed to parse access key: %v", err)
+	}
+	if parsedST.Ticket.UserID != "user-1001" {
+		t.Fatalf("mismatched parsed user ID: %s", parsedST.Ticket.UserID)
+	}
 }
 
 func TestAuth_RejectExpiredTicket(t *testing.T) {
