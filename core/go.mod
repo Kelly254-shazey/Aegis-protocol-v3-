@@ -1,6 +1,6 @@
 module aegis-core
 
-go 1.26.0
+go 1.23.0
 
 require (
 	github.com/klauspost/reedsolomon v1.14.2

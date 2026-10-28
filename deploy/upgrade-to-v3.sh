@@ -11,11 +11,19 @@ echo "🛡️  UPGRADING AEGIS CLOUD RELAY TO PROTOCOL v3 (AZURE PRODUCTION)"
 echo "=================================================================="
 
 # 1. Stop and Disable Version 2 Services
-echo "[1/6] Stopping old Version 2 services..."
+echo "[1/6] Stopping old Version 2 services and releasing ports..."
 systemctl stop aegis aegis-relay aegis-control 2>/dev/null || true
 systemctl disable aegis 2>/dev/null || true
+docker stop $(docker ps -aq) 2>/dev/null || true
+docker rm $(docker ps -aq) 2>/dev/null || true
 pkill -9 -f aegis-relay 2>/dev/null || true
 pkill -9 -f aegis 2>/dev/null || true
+fuser -k -9 443/udp 2>/dev/null || true
+fuser -k -9 443/tcp 2>/dev/null || true
+
+# Ensure Linux TUN module is active and clear stale interfaces
+modprobe tun 2>/dev/null || true
+ip link delete tun0 2>/dev/null || true
 
 # Clean old binaries
 rm -rf /opt/aegis_backup 2>/dev/null || true
@@ -124,6 +132,9 @@ systemctl enable --now aegis-relay
 sleep 2
 
 echo "=================================================================="
-echo "🎉 AEGIS PROTOCOL v3 RELAY SUCCESSFULLY DEPLOYED!"
+echo "🎉 AEGIS PROTOCOL v3 RELAY STATUS"
 echo "=================================================================="
-systemctl status aegis-relay --no-pager
+systemctl status aegis-relay --no-pager || true
+echo "------------------------------------------------------------------"
+echo "📋 RECENT DAEMON LOGS:"
+journalctl -u aegis-relay -n 25 --no-pager
