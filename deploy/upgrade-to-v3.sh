@@ -98,11 +98,16 @@ iptables -I INPUT 1 -p udp --dport 51820 -j ACCEPT
 iptables -I INPUT 1 -p tcp --dport 443 -j ACCEPT
 iptables -I INPUT 1 -p tcp --dport 8080 -j ACCEPT
 
+# Dual-Port Support: Also accept QUIC traffic on WireGuard port 51820
+iptables -t nat -C PREROUTING -p udp --dport 51820 -j REDIRECT --to-ports 443 2>/dev/null || \
+iptables -t nat -A PREROUTING -p udp --dport 51820 -j REDIRECT --to-ports 443
+
 if command -v ufw &> /dev/null; then
     ufw allow 443/udp 2>/dev/null || true
     ufw allow 51820/udp 2>/dev/null || true
     ufw allow 443/tcp 2>/dev/null || true
     ufw allow 8080/tcp 2>/dev/null || true
+    ufw reload 2>/dev/null || true
 fi
 
 WAN_INT=$(ip route | grep default | awk '{print $5}' | head -n1)
