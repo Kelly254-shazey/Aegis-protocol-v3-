@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Aegis Protocol v3</string>
+    <string name="status_disconnected">DISCONNECTED</string>
+    <string name="status_connecting">CONNECTING...</string>
+    <string name="status_protected">PROTECTED &amp; ACCELERATED</string>
+    <string name="btn_connect">ACTIVATE SHIELD</string>
+    <string name="btn_disconnect">DISCONNECT</string>
+</resources>

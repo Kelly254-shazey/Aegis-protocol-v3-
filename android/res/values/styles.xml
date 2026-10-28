@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Aegis" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">#060913</item>
+        <item name="android:statusBarColor">#060913</item>
+        <item name="android:navigationBarColor">#060913</item>
+    </style>
+</resources>
